@@ -3,53 +3,58 @@ declare const Msal;
 
 const clientId = '2a1caee3-4638-4036-badb-0b84c4b90253';
 const scopes = ['User.Read', 'Files.ReadWrite.All'];
+const uploadedName = 'test';
 let client;
 const userAgentApplication = new Msal.UserAgentApplication(clientId, null, (errorDescription, token, error, tokenType) => {
   // this callback is called after loginRedirect OR acquireTokenRedirect (not used for loginPopup/aquireTokenPopup)
 })
 
-userAgentApplication.loginPopup(scopes).then(token => {
-  console.log('user', userAgentApplication.getUser(), token);
-  userAgentApplication.acquireTokenSilent(scopes).then(function (token) {
+userAgentApplication.loginPopup(scopes)
+  .then(token => {
+    console.log('user', userAgentApplication.getUser(), token);
+    return userAgentApplication.acquireTokenSilent(scopes)
+  })
+  .then(token => {
     return token;
-  }, function (error) {
-    if (error.indexOf("interaction_required") != -1){
-        return userAgentApplication.acquireTokenPopup(scopes).then(function (token) {
-        // success
-          return token;
-      }, function (error) {
-        console.error('err', error);
-        // error
-        });
+  }, error => {
+    if (error.indexOf("interaction_required") != -1) {
+      return userAgentApplication.acquireTokenPopup(scopes);
     }
-  }).then(authToken => {
+  })
+  .then(authToken => {
     client = Client.init({
       authProvider: (done) => done(null, authToken)
     });
-    listFiles();
-  });
-});
+    return listFiles();
+  })
+  .then(items => {
+    const files = items.value.filter((item) => !item.hasOwnProperty('folder'));
+    console.log('listed files', items.value, files)
+    const randomItemIndex = Math.round(Math.random() * (files.length - 1));
+    const randomItem = files[randomItemIndex];
+    return downloadFile(randomItem)
+  })
+  .then(file => uploadFile(file))
+  .then(w => console.log('okay', w))
 
 
 function listFiles() {
   console.log('listing fikles')
-  client.api('/me/drive/root/children').get((err, res) => console.log('wat', err, res))
+  return client.api('/me/drive/root/children')
+    .get()
 }
-// userAgentApplication.acquireTokenSilent(scopes).then(function (token) {
-//   console.log("ATS promise resolved", token);
-// }, function (error) {
-//   // interaction required 
-//   console.error('hmm', error)
-//   if(error.indexOf("interaction_required") != -1){
-//       userAgentApplication.acquireTokenPopup(scopes).then(function (token) {
-//         console.log('ok got token now', token)
-//       // success
-//     }, function (error) {
-//       // error\
-//         console.error('wat', error);
-//      });
-//   }
-// });
+
+function downloadFile(file) {
+  // return client.api(`/me/drive/root/children/${file.name}/content`)
+  //   .get()
+  return fetch(file['@microsoft.graph.downloadUrl'])
+    .then(response => response.blob())
+}
+
+function uploadFile(file, name = uploadedName) {
+  return client.api(`/me/drive/root/children/${name}/content`)
+    .put(file)
+}
 
 const authEndpoint = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?';
 const redirectUri = 'http://localhost:8081/build';
