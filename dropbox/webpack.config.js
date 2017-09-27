@@ -33,6 +33,7 @@ module.exports = {
       })
     ],
     node: {
-      process: true
+      process: true,
+      require: true,
     }
 }
